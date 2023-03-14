@@ -1,18 +1,19 @@
 <script lang="ts">
-import { reactive, h, watchEffect, onMounted, VNode, readonly } from "vue";
+import { reactive, h, getCurrentInstance } from "vue";
 import Slate from "./components/slate-vue/index.vue";
 export default {
   components: {
     Slate,
   },
   setup() {
+    const instance = getCurrentInstance()
     const initialValue = reactive({
       value: [
         {
           type: "paragraph",
           children: [
             { text: "This is editable " },
-            { text: "rich", bold: true },
+            { text: "rich", bold: true, color: 'red' },
             { text: " text, " },
             { text: "much", italic: true },
             { text: " better than a " },
@@ -23,8 +24,12 @@ export default {
         {
           type: "paragraph",
           children: [
-            { text: '﻿' }
+            { text: '' }
           ]
+        },
+        {
+          type: "head-one",
+          children: [{ text: 'abc'}]
         },
         {
           type: "paragraph",
@@ -99,8 +104,9 @@ export default {
         name: '居右'
       }
     });
-    const renderElement = (node: any, options: any) => {
+    const renderLeaf = (node: any, options: any) => {
       let res: any = node;
+
       for (const key in options) {
         if (key === "text") {
           continue;
@@ -124,11 +130,21 @@ export default {
         // }
         
         if (options[key]) {
+          
           res = h(map[key].tag, res);
         }
       }
       return res;
     };
+    const renderElement = (node: any, options: any) => {
+
+      if(options.type == 'block-quote') {
+        return h('blockquote',{...options.attributes}, node)
+      }
+      if(options.type == 'head-one') {
+        return h('h1', {...options.attributes}, node)
+      }
+    }
     const f = (t: any, key: string, value: string | undefined) => {
       const { format, addNode } = t;
       if (key === "img") {
@@ -155,18 +171,14 @@ export default {
         format(key, value);
       }
     };
-    const updateValue = (e: Array<any>, v: any) => {
-      initialValue.value.length = 0;
-      initialValue.value.push(...e);
-    };
     const getData = () => {
-      console.log(initialValue.value);
+      console.log(instance.refs.ins.getInstance())
     };
     return {
       initialValue,
       map,
       renderElement,
-      updateValue,
+      renderLeaf,
       getData,
       f,
     };
@@ -176,9 +188,10 @@ export default {
 
 <template>
   <Slate
+    ref="ins"
     :initialValue="initialValue.value"
     :renderElement="renderElement"
-    @test="updateValue"
+    :renderLeaf="renderLeaf"
   >
     <template #default="format">
       <div v-for="(m, k) in map" :key="m.tag" class="format-btn">

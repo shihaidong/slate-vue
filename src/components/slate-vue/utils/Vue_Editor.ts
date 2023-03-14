@@ -1,81 +1,62 @@
-import { Editor, Point, Node, Transforms, Path } from "slate";
+import { Editor, Point, Node, Transforms, Path, Range } from "slate";
+import { ELEMENT_TO_NODE, PATH_TO_ELEMENT, NODE_TO_PATH } from "./mapData";
+import { isDOMSelection } from './util'
+export const BLANK_CHARACTER: string = '﻿'
 
-export const BLANK_CHARACTER = '﻿'
-
-function getText(editor: Editor, path: Path) {
-  return 
+// 获取指定path的string
+export function getFragmentText(editor: Editor, path: Path) {
+  const node = Node.get(editor, path)
+  const str = Node.string(node)
+  return str;
 }
 
-export function deleteBackward(editor: Editor) {
-  if(!editor.selection) {
-    return
+export function toSlateRange(editor: Editor, domRange: Selection | globalThis.Range) {
+  let anchorNode
+  let anchorOffset
+  let focusNode
+  let focusOffset
+  if(isDOMSelection(domRange)) {
+    anchorNode = domRange.anchorNode;
+    anchorOffset = domRange.anchorOffset;
+    focusNode = domRange.focusNode;
+    focusOffset = domRange.focusOffset;
+  } else {
+    anchorNode = domRange.startContainer
+    anchorOffset = domRange.startOffset
+    focusNode = domRange.endContainer
+    focusOffset = domRange.endOffset
   }
-  // 如果当前没有选中内容，则删除光标前一个字符否则删除选中的内容
-  if(Point.equals(editor.selection?.anchor, editor.selection.focus)) {
-    // 判断当前字符是否是一个空的fragement
-    if(Node.leaf(editor, editor.selection.anchor.path).text === BLANK_CHARACTER) {
-      console.log(Node.get(editor, editor.selection.anchor.path))
-      Transforms.select(editor, {
-        anchor: {
-          offset: 1,
-          path: editor.selection.anchor.path
-        },
-        focus: {
-          offset: 1,
-          path: editor.selection.focus.path
-        }
-      })
-      Editor.deleteBackward(editor, { unit: 'line' })
-      console.log(JSON.parse(JSON.stringify(editor)))
-      Editor.deleteBackward(editor, { unit: 'character'})
-    } else {
-      Editor.deleteBackward(editor, {unit: 'character'})
-    }
-    
-  }else {
-    Editor.deleteFragment(editor)
+  
+  if (anchorNode == null || anchorOffset == null || focusNode == null || focusOffset == null) {
+    return null
   }
-  // 如果删除某一个fragment为空时，必须插入一个空的字符，保证dom中的range可以获取到
-  if (Node.leaf(editor, editor.selection.anchor.path).text === '') {
-    Transforms.insertText(editor, BLANK_CHARACTER)
+  let node =
+    anchorNode.parentElement &&
+    ELEMENT_TO_NODE.get(anchorNode?.parentElement);
+  let last =
+    focusNode?.parentElement &&
+    ELEMENT_TO_NODE.get(focusNode?.parentElement);
+  // 然后根据node获取path，
+  let path = NODE_TO_PATH.get(node);
+  let lpath = NODE_TO_PATH.get(last);
+  const l = anchorNode.parentElement?.closest('.common')
+  const r = anchorNode.parentElement?.closest('.common')
+  const range = new window.Range()
+  range.setStart(anchorNode, 0)
+  range.setEnd(focusNode, focusOffset)
+  if(range.toString() === BLANK_CHARACTER) {
+    anchorOffset = 0;
+    focusOffset = 0;
   }
-}
-
-
-export function deleteForward(editor: Editor) {
-  if(!editor.selection) {
-    return
-  }
-  if(Point.equals(editor.selection?.anchor, editor.selection.focus)) {
-    if(Node.leaf(editor, editor.selection.anchor.path).text === BLANK_CHARACTER) {
-      Transforms.select(editor, {
-        anchor: {
-          offset: 0,
-          path: editor.selection.anchor.path
-        },
-        focus: {
-          offset: 0,
-          path: editor.selection.focus.path
-        }
-      })
-      
-      Editor.deleteForward(editor, { unit: 'character'})
-      Editor.deleteForward(editor, { unit: 'line' })
-    }else {
-      Editor.deleteForward(editor, {unit: 'character'})
-    }
-    
-  }else {
-    Editor.deleteFragment(editor)
-  }
-  // 当按delete键删除到最后一个字符时，保证dom中的range，所以插入一个空白字符
-  if (Node.leaf(editor, editor.selection.anchor.path).text === '') {
-    Transforms.insertText(editor, BLANK_CHARACTER)
+  return {
+    anchor: {
+      offset: anchorOffset,
+      path: path,
+    },
+    focus: {
+      offset: focusOffset,
+      path: lpath,
+    },
   }
 }
 
-
-export function insertNewRow(editor: Editor) {
-  Editor.insertBreak(editor)
-  Editor.insertText(editor, BLANK_CHARACTER)
-}

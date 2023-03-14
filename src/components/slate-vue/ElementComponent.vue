@@ -15,12 +15,14 @@ import {
   onUpdated,
 } from "vue";
 import Blank from "./blank.vue";
-import { ELEMENT_TO_NODE, NODE_TO_PATH, PATH_TO_ELEMENT } from "./mapData";
+import TextComponent from "./components/TextComponent.vue";
+import { ELEMENT_TO_NODE, NODE_TO_PATH, PATH_TO_ELEMENT } from "./utils/mapData";
 
 type ElementComponentProps = {
   data: Object;
   path: Array<Number>;
   renderElement?: Function;
+  renderLeaf?: Function;
 };
 export default defineComponent({
   name: "ElementComponent",
@@ -37,6 +39,10 @@ export default defineComponent({
       type: Function,
       default: null,
     },
+    renderLeaf: {
+      type: Function,
+      default: null
+    }
   },
   components: {
     Blank,
@@ -63,40 +69,33 @@ export default defineComponent({
           data: item,
           path,
           renderElement: p.renderElement,
+          renderLeaf: p.renderLeaf
         });
       });
     };
-    return (x) => {
+    const refInstance = (e: Element) => {
+      let path = [...props.path, 0];
+      PATH_TO_ELEMENT.set(path.join(','), e)
+    }
+    return () => {
+      const isRoot = props.path.length == 1 ? true : false
       return h(Blank, () => {
         if (props.data.text || props.data.text === "") {
           NODE_TO_PATH.set(props.data, props.path);
-          const wrap = h("span", { ref: 'tt' }, props.data.text)
-    
-          return props.renderElement
-            ? props.renderElement(wrap, props.data)
+          const wrap = h("span", { ref: 'tt', class:"text" }, props.data.text == '' ? h(TextComponent) : props.data.text)
+          return props.renderLeaf
+            ? props.renderLeaf(wrap, props.data)
             : wrap;
-        } else if (props.data.type === "paragraph") {
-          return h("p", {}, recursion(props));
-        } else if (props.data.type === "image") {
-          return h(
-            "span",
-            {ref: 'tt'},
-            h("img", {
-              src: props.data.url,
-              alt: props.data.children[0].text,
-            })
-          );
-        } else if (props.data.type === "block-quote") {
-          return h("blockquote", recursion(props));
-        }
+        } else if (props.data.type === "paragraph" || !props.renderElement) {
+          return isRoot ? h('p', { class: 'common' }, recursion(props)) : recursion(props);
+        } else {
+          return props.renderElement(recursion(props), { type: props.data.type, attributes: { class: isRoot? 'common': ''}})
+        } 
       });
     };
   },
 });
 </script>
 <style scoped>
-p > span:empty {
-  display: block;
-  height: 30px;
-}
+
 </style>

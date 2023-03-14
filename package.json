@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "is-hotkey": "^0.2.0",
     "slate": "^0.91.4",
     "vue": "^3.2.45"
   },

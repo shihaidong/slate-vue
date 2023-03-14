@@ -4,11 +4,10 @@ export function top(e: string) {
   })
 }
 
-export function mergeStyle(parent, children) {
-  for(let key of children) {
-    parent[key] = children[key]
-  }
-  return parent
-}
-
 export * from './Vue_Editor'
+
+export * from './util'
+
+export * from './HotKeys'
+
+export * from './KeyEvent'
