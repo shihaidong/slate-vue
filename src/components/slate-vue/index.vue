@@ -1,6 +1,9 @@
 <template>
   <div>
-    <slot v-bind="{ format, addNode }"></slot>
+    <div>
+      <DefaultFormat :transforms="{ toggleMark, toggleBlock, addNode, currentFormat, addMark }"></DefaultFormat>
+      <slot v-bind="{ toggleMark, toggleBlock, addNode, currentFormat }"></slot>
+    </div>
     <div
       ref="editorInstance"
       contenteditable="true"
@@ -31,17 +34,35 @@
 </template>
 
 <script lang="ts">
-import { createEditor, Descendant, Editor, Range, Transforms } from "slate";
+import {
+  createEditor,
+  Descendant,
+  Editor,
+  Range,
+  Transforms,
+  Element as SlateElement,
+} from "slate";
 import { HAS_BEFORE_INPUT_SUPPORT } from "./utils/environment";
-import { nextTick, onUpdated, getCurrentInstance, reactive, toRaw } from "vue";
+import {
+  nextTick,
+  onUpdated,
+  getCurrentInstance,
+  reactive,
+  toRaw,
+  ref,
+} from "vue";
 import {
   ELEMENT_TO_NODE,
   PATH_TO_ELEMENT,
   NODE_TO_PATH,
 } from "./utils/mapData";
 import ElementComponent from "./ElementComponent.vue";
+import DefaultFormat from "./components/DefaultFormat.vue";
 import { normalizeInitData, KeyEvent, toSlateRange } from "./utils";
 import Hotkeys from "./utils/HotKeys";
+
+const LIST_TYPES = ["ul", "ol"];
+const TEXT_ALIGN_TYPES = ["left", "center", "right", "justify"];
 export default {
   name: "Slate",
   props: {
@@ -61,6 +82,7 @@ export default {
   emits: ["test"],
   components: {
     ElementComponent,
+    DefaultFormat
   },
   setup(props, ctx) {
     const editor = createEditor();
@@ -72,6 +94,11 @@ export default {
     const editorData = reactive({
       initialValue: rawData,
     });
+    const currentFormat = reactive({
+      currentMark: {},
+      currentType: '',
+    });
+    const flag = ref(false);
     editor.children = normalizeData;
     window.document.addEventListener("selectionchange", (e) => {
       if (!isComponsition) {
@@ -335,17 +362,89 @@ export default {
       // console.log(e)
       // e.preventDefault()
     };
-    const format = (format: string, value = true) => {
-      console.log(JSON.parse(JSON.stringify(editor)));
-      if (isMark(format)) {
+    const addMark = (format: string, value = true) => {
+      Editor.addMark(editor, format, value)
+      refushMark()
+      refush()
+    }
+    const refushMark = () => {
+      const selection = document.getSelection()
+      let size = parseInt(window.getComputedStyle(selection.anchorNode?.parentElement, null).fontSize.slice(0, -2))
+      currentFormat.currentMark = {};
+      currentFormat.currentMark.fontSize = size
+      const marks = Editor.marks(editor);
+      for (let key in marks) {
+        currentFormat.currentMark[key] = marks[key];
+      }
+      if (editor.selection && Range.isCollapsed(editor.selection)) {
+        currentFormat.currentType = editor.children[editor.selection.anchor.path.slice(0, 1)].type
+        console.log(currentFormat.currentType)
+      }
+    }
+    const toggleMark = (format: string, value = true) => {
+      if (isMarkActive(format)) {
         editor.removeMark(format);
       } else {
         editor.addMark(format, value);
       }
-      console.log(JSON.parse(JSON.stringify(editor)));
       nextTick(() => {
+        refushMark()
         refush();
       });
+    };
+
+    const isMarkActive = (e: string) => {
+      const marks: any = Editor.marks(editor);
+      const isActive = marks[e] ? true : false;
+      return isActive;
+    };
+    const isBlockActive = (editor, format, blockType = "type") => {
+      const { selection } = editor;
+      if (!selection) return false;
+
+      const [match] = Array.from(
+        Editor.nodes(editor, {
+          at: Editor.unhangRange(editor, selection),
+          match: (n) =>
+            !Editor.isEditor(n) &&
+            SlateElement.isElement(n) &&
+            n[blockType] === format,
+        })
+      );
+
+      return !!match;
+    };
+
+    const toggleBlock = (format) => {
+      const isActive = isBlockActive(
+        editor,
+        format,
+        TEXT_ALIGN_TYPES.includes(format) ? "textAlign" : "type"
+      );
+      const isList = LIST_TYPES.includes(format);
+
+      Transforms.unwrapNodes(editor, {match: (n) =>  { console.log(n);return !Editor.isEditor(n) &&
+          SlateElement.isElement(n) &&
+          LIST_TYPES.includes(n.type) &&
+          !TEXT_ALIGN_TYPES.includes(format)},split: true});
+      let newProperties: Partial<SlateElement>;
+      if (TEXT_ALIGN_TYPES.includes(format)) {
+        newProperties = {
+          textAlign: isActive ? undefined : format,
+        };
+      } else {
+        newProperties = {
+          type: isActive ? "paragraph" : isList ? "li" : format,
+        };
+      }
+      Transforms.setNodes<SlateElement>(editor, newProperties);
+
+      if (!isActive && isList) {
+        const block = { type: format, children: [] };
+        Transforms.wrapNodes(editor, block);
+      }
+      refushMark();
+      refush();
     };
     const onDragEnd = (e: DragEvent) => {
       // e.preventDefault();
@@ -377,11 +476,7 @@ export default {
       // deleteBackward(editor)
       refush();
     };
-    const isMark = (e: string) => {
-      const marks: any = Editor.marks(editor);
-      const isActive = marks[e] ? true : false;
-      return isActive;
-    };
+
     const onClick = (e: MouseEvent) => {
       const selection = window.document.getSelection();
       if (selection) {
@@ -400,12 +495,24 @@ export default {
         // let path = NODE_TO_PATH.get(node);
         // let lpath = NODE_TO_PATH.get(last);
         // // 获取path和offset之后，设置当前editor实例的selection
+        // console.log(selection.parent)
+        
+        
+        if(selection.isCollapsed) {
+          // if(selection.anchorNode instanceof Text) {
+            
+          // }
+        }
         if (range) {
           const [anchor, focus] = Editor.edges(editor, range);
+          if(editor.selection) {
+            Transforms.deselect(editor)
+          }
           Transforms.select(editor, {
             anchor,
             focus,
           });
+          refushMark()
         }
       }
     };
@@ -509,8 +616,8 @@ export default {
 
         if (targetRange) {
           const range = toSlateRange(editor, targetRange);
-          if(!range) {
-            return
+          if (!range) {
+            return;
           }
           if (!selection || !Range.equals(selection, range)) {
             native = false;
@@ -701,12 +808,14 @@ export default {
     const onPaste = (e: ClipboardEvent) => {
       if (!HAS_BEFORE_INPUT_SUPPORT) {
         e.preventDefault();
-        if(e.clipboardData) {
+        if (e.clipboardData) {
           Editor.insertText(editor, e.clipboardData.getData("text/plain"));
         }
       }
     };
     return {
+      currentFormat,
+      flag,
       getInstance,
       onKeyDown,
       onClick,
@@ -720,8 +829,10 @@ export default {
       onCompositionend,
       onCompositionUpdate,
       onInput,
-      format,
+      addMark,
+      toggleMark,
       addNode,
+      toggleBlock,
       data: editorData.initialValue,
       renderElement: props.renderElement,
       renderLeaf: props.renderLeaf,
@@ -732,11 +843,14 @@ export default {
 
 <style scoped>
 .slate-main {
-  height: 400px;
-  width: 100%;
-  border: 1px solid black;
-  padding: 10px;
+  height: 100vh;
+  width: 794px;
+  /* border: 1px solid black; */
+  padding: 60px 50px;
   box-sizing: border-box;
+  overflow: auto;
+  outline: 1px solid #c7c7c7;
+  margin: 0 auto;
   overflow: auto;
 }
 </style>
@@ -755,5 +869,11 @@ export default {
 .slate-main p > span:empty {
   display: block;
   height: 24px;
+}
+</style>
+
+<style scoped>
+:deep(img) {
+  width: 100%;
 }
 </style>

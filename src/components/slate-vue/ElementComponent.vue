@@ -87,9 +87,10 @@ export default defineComponent({
             ? props.renderLeaf(wrap, props.data)
             : wrap;
         } else if (props.data.type === "paragraph" || !props.renderElement) {
-          return isRoot ? h('p', { class: 'common' }, recursion(props)) : recursion(props);
+          return isRoot ? h('p', { class: 'common', style: { ...props.data } }, recursion(props)) : recursion(props);
         } else {
-          return props.renderElement(recursion(props), { type: props.data.type, attributes: { class: isRoot? 'common': ''}})
+          const child = props.renderElement(recursion(props), { type: props.data.type, ...props.data})
+          return isRoot ? h('p', { class: 'common', style: { ...props.data } }, child) : child;
         } 
       });
     };

@@ -48,6 +48,7 @@ export function toSlateRange(editor: Editor, domRange: Selection | globalThis.Ra
     anchorOffset = 0;
     focusOffset = 0;
   }
+
   return {
     anchor: {
       offset: anchorOffset,
