@@ -11,3 +11,7 @@ export * from './util'
 export * from './HotKeys'
 
 export * from './KeyEvent'
+
+
+export * from './formatOperation'
+export * from './formatRender'

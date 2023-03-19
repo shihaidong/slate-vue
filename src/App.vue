@@ -116,28 +116,6 @@ export default {
         if (key === "text") {
           continue;
         }
-        // console.log('*', key)
-        if (key === "color") {
-          if (!res.props) {
-            res.props = {};
-          }
-          if(!res.props.style) {
-            res.props.style = {}
-          }
-          res.props.style.color = options.color
-          continue;
-        }
-        if (key === "fontSize") {
-          if (!res.props) {
-            res.props = {};
-          }
-          if(!res.props.style) {
-            res.props.style = {}
-          }
-          res.props.style.fontSize = options.fontSize + 'px'
-          console.log(res)
-          continue
-        }
         if (key === "textAlign") {
           console.log(key)
           if (!res.props) {
@@ -183,27 +161,23 @@ export default {
         return h("ol", node)
       }
     };
+    const config = reactive({
+      includeFormat: ["head", "font-size", "bold", "underline", "color", "code", "picture", "list", "number-list", "textAlign", "common"],
+      excludeFormat: [],
+      uploadImage: () => {
+        
+      }
+    })
     const getData = () => {
       console.log(instance.refs.ins.getInstance());
     };
-    const blockChange = (format, obj) => {
-      console.log(format, obj);
-      const { toggleBlock, currentMark } = obj;
-      console.log(currentMark);
-      toggleBlock(format);
-    };
-    const inlineChange = (format, obj) => {
-      const { toggleMark } = obj;
-      toggleMark(format);
-    };
     return {
       initialValue,
+      config,
       map,
       renderElement,
       renderLeaf,
-      getData,
-      blockChange,
-      inlineChange,
+      getData
     };
   },
 };
@@ -215,6 +189,7 @@ export default {
     :initialValue="initialValue.value"
     :renderElement="renderElement"
     :renderLeaf="renderLeaf"
+    :config="config"
   >
     <template #default="format">    
     </template>

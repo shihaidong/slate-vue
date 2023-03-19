@@ -2,7 +2,7 @@
   <nav @click="format"
       :class="
         Object.keys(props.transforms.currentFormat.currentMark).includes(props.format)
-          ? 'active'
+          ? props.value ? props.transforms.currentFormat.currentMark[props.format] == props.value ? 'active' : '' : 'active'
           : ''
       "
     >
@@ -27,9 +27,8 @@ const props = defineProps({
 })
 // console.log(props)
 const format = () => {
-  const { toggleMark } = props.transforms
-  console.log(props.format, props.value)
-  toggleMark(props.format, props.value)
+  const { toggleFormat } = props.transforms
+  toggleFormat(props.format, props.value)
 };
 </script>
 <style scoped>

@@ -47,3 +47,31 @@ function direction(value) {
 
   return 'neutral'
 }
+// 排除keys属性
+export function exclude(obj: any, keys: Array<string>) {
+  if(typeof obj != 'object' && obj !== null) {
+    throw 'obj 必须是一个对象'
+  }
+  let res: any = {}
+  for(const key in obj) {
+    if(keys.includes(key)) {
+      continue
+    }
+    res[key] = obj[key]
+  }
+  return res
+}
+// 获取keys属性
+export function extract(obj: any, keys: Array<string>) {
+  if(typeof obj != 'object' && obj !== null) {
+    throw 'obj 必须是一个对象'
+  }
+  let res: any = {}
+  for(const key of keys) {
+    if(!obj[key]) {
+      continue
+    }
+    res[key] = obj[key]
+  }
+  return res
+}

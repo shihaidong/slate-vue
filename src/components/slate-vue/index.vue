@@ -1,8 +1,8 @@
 <template>
   <div>
     <div>
-      <DefaultFormat :transforms="{ toggleMark, toggleBlock, addNode, currentFormat, addMark }"></DefaultFormat>
-      <slot v-bind="{ toggleMark, toggleBlock, addNode, currentFormat }"></slot>
+      <Toolbar :config="config" :transforms="{ editor, currentFormat, refush, refushMark }"></Toolbar>
+      <slot v-bind="{ editor, currentFormat, refush, refushMark }"></slot>
     </div>
     <div
       ref="editorInstance"
@@ -48,8 +48,7 @@ import {
   onUpdated,
   getCurrentInstance,
   reactive,
-  toRaw,
-  ref,
+  toRaw
 } from "vue";
 import {
   ELEMENT_TO_NODE,
@@ -57,12 +56,10 @@ import {
   NODE_TO_PATH,
 } from "./utils/mapData";
 import ElementComponent from "./ElementComponent.vue";
-import DefaultFormat from "./components/DefaultFormat.vue";
-import { normalizeInitData, KeyEvent, toSlateRange } from "./utils";
+import Toolbar from "./components/Toolbar.vue";
+import { normalizeInitData, KeyEvent, toSlateRange, renderElement as defaultRenderElement, renderLeaf as defaultRenderLeaf, extract } from "./utils";
 import Hotkeys from "./utils/HotKeys";
 
-const LIST_TYPES = ["ul", "ol"];
-const TEXT_ALIGN_TYPES = ["left", "center", "right", "justify"];
 export default {
   name: "Slate",
   props: {
@@ -78,11 +75,15 @@ export default {
       type: Function,
       default: null,
     },
+    config: {
+      type: Object,
+      default: () => null
+    }
   },
   emits: ["test"],
   components: {
     ElementComponent,
-    DefaultFormat
+    Toolbar
   },
   setup(props, ctx) {
     const editor = createEditor();
@@ -94,11 +95,24 @@ export default {
     const editorData = reactive({
       initialValue: rawData,
     });
-    const currentFormat = reactive({
+    const currentFormat = reactive<{currentMark: any, currentType: string}>({
       currentMark: {},
       currentType: '',
     });
-    const flag = ref(false);
+    const renderElement = (node: any, options: any) => {
+      let res = defaultRenderElement(node, options)
+      if(!res && props.renderElement) {
+        res = props.renderElement(node, options)
+      }
+      return res ?? node
+    }
+    const renderLeaf = (node: any, options: any) => {
+      let res = defaultRenderLeaf(node, options)
+      if(!res && props.renderElement) {
+        res = props.renderElement(node, options)
+      }
+      return res ?? node
+    }
     editor.children = normalizeData;
     window.document.addEventListener("selectionchange", (e) => {
       if (!isComponsition) {
@@ -143,7 +157,6 @@ export default {
     });
     // debugger
     keyEvent.use((e: KeyboardEvent, editor: Editor, next: Function) => {
-      console.log(e);
       if (e.key == "Tab") {
         e.preventDefault();
         Editor.insertText(editor, "\t");
@@ -155,7 +168,6 @@ export default {
     keyEvent.use((e: KeyboardEvent, editor: Editor, next: Function) => {
       const { selection } = editor;
       // debugger
-      console.log(selection);
       // if(selection) {
       //   Transforms.deselect(editor)
       // }
@@ -345,6 +357,7 @@ export default {
     });
 
     const onKeyDown = (e: KeyboardEvent) => {
+      console.log('onkeydown', e)
       // 如果editor的selection不存在或者activeElement不是指定dom元素
       if (!editor.selection) {
         return;
@@ -362,90 +375,36 @@ export default {
       // console.log(e)
       // e.preventDefault()
     };
-    const addMark = (format: string, value = true) => {
-      Editor.addMark(editor, format, value)
-      refushMark()
-      refush()
-    }
     const refushMark = () => {
+      // css中部分可继承属性
+      const domInheirtAttrs = ["textAlign", "fontSize", "color", "fontStyle"]
       const selection = document.getSelection()
       let size = parseInt(window.getComputedStyle(selection.anchorNode?.parentElement, null).fontSize.slice(0, -2))
       currentFormat.currentMark = {};
+      // 按优先级获取当前节点祖先节点可继承属性
+      let inheir: any = {}
+      if(editor.selection) {
+        const path = editor.selection.anchor.path
+        for(const index in path) {
+          const [obj,] = Editor.parent(editor, editor.selection, { depth: 2 + parseInt(index), edge: 'end' })
+          inheir = {...inheir, ...extract(obj, domInheirtAttrs)}
+        }
+      }
+      for(const key in inheir) {
+        currentFormat.currentMark[key] = inheir[key]
+      }
       currentFormat.currentMark.fontSize = size
-      const marks = Editor.marks(editor);
+      // 获取当前node的marks
+      const marks: any = Editor.marks(editor);
       for (let key in marks) {
         currentFormat.currentMark[key] = marks[key];
       }
       if (editor.selection && Range.isCollapsed(editor.selection)) {
         currentFormat.currentType = editor.children[editor.selection.anchor.path.slice(0, 1)].type
-        console.log(currentFormat.currentType)
+        // console.log(currentFormat.currentType)
       }
     }
-    const toggleMark = (format: string, value = true) => {
-      if (isMarkActive(format)) {
-        editor.removeMark(format);
-      } else {
-        editor.addMark(format, value);
-      }
-      nextTick(() => {
-        refushMark()
-        refush();
-      });
-    };
-
-    const isMarkActive = (e: string) => {
-      const marks: any = Editor.marks(editor);
-      const isActive = marks[e] ? true : false;
-      return isActive;
-    };
-    const isBlockActive = (editor, format, blockType = "type") => {
-      const { selection } = editor;
-      if (!selection) return false;
-
-      const [match] = Array.from(
-        Editor.nodes(editor, {
-          at: Editor.unhangRange(editor, selection),
-          match: (n) =>
-            !Editor.isEditor(n) &&
-            SlateElement.isElement(n) &&
-            n[blockType] === format,
-        })
-      );
-
-      return !!match;
-    };
-
-    const toggleBlock = (format) => {
-      const isActive = isBlockActive(
-        editor,
-        format,
-        TEXT_ALIGN_TYPES.includes(format) ? "textAlign" : "type"
-      );
-      const isList = LIST_TYPES.includes(format);
-
-      Transforms.unwrapNodes(editor, {match: (n) =>  { console.log(n);return !Editor.isEditor(n) &&
-          SlateElement.isElement(n) &&
-          LIST_TYPES.includes(n.type) &&
-          !TEXT_ALIGN_TYPES.includes(format)},split: true});
-      let newProperties: Partial<SlateElement>;
-      if (TEXT_ALIGN_TYPES.includes(format)) {
-        newProperties = {
-          textAlign: isActive ? undefined : format,
-        };
-      } else {
-        newProperties = {
-          type: isActive ? "paragraph" : isList ? "li" : format,
-        };
-      }
-      Transforms.setNodes<SlateElement>(editor, newProperties);
-
-      if (!isActive && isList) {
-        const block = { type: format, children: [] };
-        Transforms.wrapNodes(editor, block);
-      }
-      refushMark();
-      refush();
-    };
+    
     const onDragEnd = (e: DragEvent) => {
       // e.preventDefault();
       console.log("dragend", e);
@@ -470,12 +429,6 @@ export default {
         document.getSelection()?.addRange(range);
       }
     });
-    const addNode = (val: any) => {
-      Editor.insertFragment(editor, val);
-      Transforms.insertNodes(editor, val);
-      // deleteBackward(editor)
-      refush();
-    };
 
     const onClick = (e: MouseEvent) => {
       const selection = window.document.getSelection();
@@ -569,48 +522,8 @@ export default {
         // Chrome also has issues correctly editing the end of anchor elements: https://bugs.chromium.org/p/chromium/issues/detail?id=1259100
         // Therefore we don't allow native events to insert text at the end of anchor nodes.
         const { anchor } = selection;
-
-        // const [node, offset] = ReactEditor.toDOMPoint(editor, anchor)
-        // const anchorNode = node.parentElement?.closest('a')
-
-        // const window = ReactEditor.getWindow(editor)
-
-        // if (
-        //   native &&
-        //   anchorNode &&
-        //   ReactEditor.hasDOMNode(editor, anchorNode)
-        // ) {
-        //   // Find the last text node inside the anchor.
-        //   const lastText = window?.document
-        //     .createTreeWalker(anchorNode, NodeFilter.SHOW_TEXT)
-        //     .lastChild() as DOMText | null
-
-        //   if (lastText === node && lastText.textContent?.length === offset) {
-        //     native = false
-        //   }
-        // }
-
-        // Chrome has issues with the presence of tab characters inside elements with whiteSpace = 'pre'
-        // causing abnormal insert behavior: https://bugs.chromium.org/p/chromium/issues/detail?id=1219139
-        // if (
-        //   native &&
-        //   node.parentElement &&
-        //   window?.getComputedStyle(node.parentElement)?.whiteSpace === 'pre'
-        // ) {
-        //   const block = Editor.above(editor, {
-        //     at: anchor.path,
-        //     match: n => Element.isElement(n) && Editor.isBlock(editor, n),
-        //   })
-
-        //   if (block && Node.string(block[0]).includes('\t')) {
-        //     native = false
-        //   }
-        // }
       }
 
-      // COMPAT: For the deleting forward/backward input types we don't want
-      // to change the selection because it is the range that will be deleted,
-      // and those commands determine that for themselves.
       if (!type.startsWith("delete") || type.startsWith("deleteBy")) {
         const [targetRange] = (event as any).getTargetRanges();
 
@@ -655,6 +568,7 @@ export default {
       ) {
         const direction = type.endsWith("Backward") ? "backward" : "forward";
         Editor.deleteFragment(editor, { direction });
+        refush()
         return;
       }
 
@@ -801,6 +715,8 @@ export default {
 
     const onCut = (e: ClipboardEvent) => {
       console.log("oncut", e);
+      const sel = document.getSelection()?.getRangeAt(0)
+      e.clipboardData?.setData('text/plain', sel?.toString() ?? '')
       e.preventDefault();
       Editor.deleteFragment(editor);
       refush();
@@ -814,8 +730,8 @@ export default {
       }
     };
     return {
+      editor,
       currentFormat,
-      flag,
       getInstance,
       onKeyDown,
       onClick,
@@ -829,13 +745,12 @@ export default {
       onCompositionend,
       onCompositionUpdate,
       onInput,
-      addMark,
-      toggleMark,
-      addNode,
-      toggleBlock,
+      refush,
+      refushMark,
       data: editorData.initialValue,
-      renderElement: props.renderElement,
-      renderLeaf: props.renderLeaf,
+      renderElement,
+      renderLeaf,
+      config: props.config
     };
   },
 };

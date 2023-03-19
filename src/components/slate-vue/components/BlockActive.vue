@@ -20,8 +20,8 @@ const props = defineProps({
   }
 })
 const format = () => {
-  const { toggleBlock } = props.transforms
-  toggleBlock(props.format)
+  const { toggleFormat } = props.transforms
+  toggleFormat(props.format)
 };
 </script>
 
